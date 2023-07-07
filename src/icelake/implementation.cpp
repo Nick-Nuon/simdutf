@@ -667,7 +667,7 @@ simdutf_warn_unused size_t implementation::convert_valid_utf8_to_utf32(const cha
 
   // Note: AVX512 procedure looks up 4 bytes forward, and
   //       correctly converts multi-byte chars even if their
-  //       continuation bytes lie outsiede 16-byte window.
+  //       continuation bytes lie outside 16-byte window.
   //       It meas, we have to skip continuation bytes from
   //       the beginning ret.first, as they were already consumed.
   while (ret.first != end && ((uint8_t(*ret.first) & 0xc0) == 0x80)) {
