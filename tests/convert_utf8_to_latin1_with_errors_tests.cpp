@@ -18,12 +18,6 @@ namespace {
   constexpr size_t trials = 10000;
 }
 
-void printByteInBinary(const char& byte) {
-    for (int i = 7; i >= 0; --i) {
-        std::cout << ((byte >> i) & 1);
-    }
-    std::cout << std::endl;
-}
 
 
 TEST(convert_pure_ASCII) {
@@ -73,20 +67,20 @@ TEST(convert_1_or_2_valid_UTF8_bytes_to_latin1) {
   uint32_t seed{1234};
   simdutf::tests::helpers::RandomIntRanges random({{0xff, 0x10FFFF}}, seed);
 
-auto getUtf8SequenceLength = [](char byte) {
-    if ((byte & 0b11100000) == 0b11000000) { // 2 byte UTF-8 header
-        return 2;
-    }
-    else if ((byte & 0b11110000) == 0b11100000) { // 3 byte UTF-8 header
-        return 3;
-    }
-    else if ((byte & 0b11111000) == 0b11110000) { // 4 byte UTF-8 header
-        return 4;
-    }
-    else {
-        return 1; // 1 byte UTF-8 sequence (ASCII)
-    }
-};
+  auto getUtf8SequenceLength = [](char byte) {
+      if ((byte & 0b11100000) == 0b11000000) { // 2 byte UTF-8 header
+          return 2;
+      }
+      else if ((byte & 0b11110000) == 0b11100000) { // 3 byte UTF-8 header
+          return 3;
+      }
+      else if ((byte & 0b11111000) == 0b11110000) { // 4 byte UTF-8 header
+          return 4;
+      }
+      else {
+          return 1; // 1 byte UTF-8 sequence (ASCII)
+      }
+  };
 
   for(size_t trial = 0; trial < trials; trial++) {
     transcode_utf8_to_latin1_test_base test(random, fix_size);
@@ -171,7 +165,7 @@ TEST(too_short_error) {
 
 TEST(too_long_error) {
   uint32_t seed{1234};
-  simdutf::tests::helpers::RandomIntRanges random({{0x7f, 0xff}}, seed); // in this context, conversion to latin 1 will register everything past 0xff as a TOO_LARGE error
+  simdutf::tests::helpers::RandomIntRanges random({{0x7f, 0xff}}, seed);
   for(size_t trial = 0; trial < trials; trial++) {
     transcode_utf8_to_latin1_test_base test(random, fix_size);
     for (int i = 1; i < fix_size; i++) {
