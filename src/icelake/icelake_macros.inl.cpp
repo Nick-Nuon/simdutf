@@ -100,17 +100,19 @@
             _mm512_storeu_si512((__m512i*)output, INPUT);                                              \
         }                                                                                                   \
         output += VALID_COUNT;                                                                              \
-    } else {                                                                                                \
+    } else if (UTF16){                                                                                                \
         if(MASKED) {                                                                                        \
             output += utf32_to_utf16_masked<big_endian>(byteflip, INPUT, VALID_COUNT, reinterpret_cast<char16_t *>(output));      \
         } else {                                                                                            \
             output += utf32_to_utf16<big_endian>(byteflip, INPUT, VALID_COUNT, reinterpret_cast<char16_t *>(output));             \
         }                                                                                                   \
-    }                                                                                                       \
+    } else { \
+        _mm512_storeu_si512((__m512i*)output, INPUT); \
+    } \
 }
 
 
-#define SIMDUTF_ICELAKE_STORE_ASCII(UTF32, utf8, output)                                  \
+#define SIMDUTF_ICELAKE_STORE_ASCII( utf8, output)                                  \
         if (UTF32) {                                                                      \
                 const __m128i t0 = _mm512_castsi512_si128(utf8);                          \
                 const __m128i t1 = _mm512_extracti32x4_epi32(utf8, 1);                    \
@@ -120,7 +122,7 @@
                 _mm512_storeu_si512((__m512i*)(output + 1*16), _mm512_cvtepu8_epi32(t1)); \
                 _mm512_storeu_si512((__m512i*)(output + 2*16), _mm512_cvtepu8_epi32(t2)); \
                 _mm512_storeu_si512((__m512i*)(output + 3*16), _mm512_cvtepu8_epi32(t3)); \
-        } else {                                                                          \
+        } else if (UTF16) {                                                                          \
                 const __m256i h0 = _mm512_castsi512_si256(utf8);                          \
                 const __m256i h1 = _mm512_extracti64x4_epi64(utf8, 1);                    \
                 if(big_endian) {                                                          \
@@ -130,4 +132,7 @@
                 _mm512_storeu_si512((__m512i*)(output + 0*16), _mm512_cvtepu8_epi16(h0)); \
                 _mm512_storeu_si512((__m512i*)(output + 2*16), _mm512_cvtepu8_epi16(h1)); \
                 }                                                                         \
-        }
+         } else {                                                                         \
+                _mm512_storeu_epi8 ((__m512i*)(output), utf8);                            \
+         }
+        

@@ -53,6 +53,7 @@ template <endianness big_endian, typename OUTPUT>
 std::pair<const char*, OUTPUT*> validating_utf8_to_fixed_length(const char* str, size_t len, OUTPUT* dwords) {
     constexpr bool UTF32 = std::is_same<OUTPUT, uint32_t>::value;
     constexpr bool UTF16 = std::is_same<OUTPUT, char16_t>::value;
+    constexpr bool LATIN1 = std::is_same<OUTPUT, uint8_t>::value;
     static_assert(UTF32 or UTF16, "output type has to be uint32_t (for UTF-32) or char16_t (for UTF-16)");
     static_assert(!(UTF32 and big_endian), "we do not currently support big-endian UTF-32");
 
@@ -79,7 +80,7 @@ std::pair<const char*, OUTPUT*> validating_utf8_to_fixed_length(const char* str,
     while (ptr + 64 + 64 <= end) {
         const __m512i utf8 = _mm512_loadu_si512((const __m512i*)ptr);
         if(checker.check_next_input(utf8)) {
-            SIMDUTF_ICELAKE_STORE_ASCII(UTF32, utf8, output)
+            SIMDUTF_ICELAKE_STORE_ASCII( utf8, output)
             output += 64;
             ptr += 64;
             continue;
@@ -130,7 +131,7 @@ std::pair<const char*, OUTPUT*> validating_utf8_to_fixed_length(const char* str,
     if (ptr + 64 <= end) {
         const __m512i utf8 = _mm512_loadu_si512((const __m512i*)ptr);
         if(checker.check_next_input(utf8)) {
-            SIMDUTF_ICELAKE_STORE_ASCII(UTF32, utf8, output)
+            SIMDUTF_ICELAKE_STORE_ASCII( utf8, output)
             output += 64;
             ptr += 64;
         } else {
@@ -176,6 +177,7 @@ template <endianness big_endian, typename OUTPUT>
 std::tuple<const char*, OUTPUT*, bool> validating_utf8_to_fixed_length_with_constant_checks(const char* str, size_t len, OUTPUT* dwords) {
     constexpr bool UTF32 = std::is_same<OUTPUT, uint32_t>::value;
     constexpr bool UTF16 = std::is_same<OUTPUT, char16_t>::value;
+    constexpr bool LATIN1 = std::is_same<OUTPUT, uint8_t>::value;
     static_assert(UTF32 or UTF16, "output type has to be uint32_t (for UTF-32) or char16_t (for UTF-16)");
     static_assert(!(UTF32 and big_endian), "we do not currently support big-endian UTF-32");
 
@@ -202,7 +204,7 @@ std::tuple<const char*, OUTPUT*, bool> validating_utf8_to_fixed_length_with_cons
     while (ptr + 64 + 64 <= end) {
         const __m512i utf8 = _mm512_loadu_si512((const __m512i*)ptr);
         if(checker.check_next_input(utf8)) {
-            SIMDUTF_ICELAKE_STORE_ASCII(UTF32, utf8, output)
+            SIMDUTF_ICELAKE_STORE_ASCII( utf8, output)
             output += 64;
             ptr += 64;
             continue;
@@ -256,7 +258,7 @@ std::tuple<const char*, OUTPUT*, bool> validating_utf8_to_fixed_length_with_cons
     if (ptr + 64 <= end) {
         const __m512i utf8 = _mm512_loadu_si512((const __m512i*)ptr);
         if(checker.check_next_input(utf8)) {
-            SIMDUTF_ICELAKE_STORE_ASCII(UTF32, utf8, output)
+            SIMDUTF_ICELAKE_STORE_ASCII( utf8, output)
             output += 64;
             ptr += 64;
         } else if(checker.errors()) {

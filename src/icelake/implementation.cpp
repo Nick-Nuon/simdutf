@@ -501,8 +501,32 @@ simdutf_warn_unused result implementation::convert_utf8_to_latin1_with_errors(co
   return scalar::utf8_to_latin1::convert_with_errors(buf, len, latin1_output);
 }
 
-simdutf_warn_unused size_t implementation::convert_valid_utf8_to_latin1(const char* buf, size_t len, char* latin1_output) const noexcept {
-  return scalar::utf8_to_latin1::convert_valid(buf, len, latin1_output);
+simdutf_warn_unused size_t implementation::convert_valid_utf8_to_latin1(const char* buf, size_t len, char* latin1_out) const noexcept {
+  uint8_t* latin1_output = reinterpret_cast<uint8_t*>(latin1_out);
+  utf8_to_latin1_result ret = icelake::valid_utf8_to_fixed_length<endianness::LITTLE, uint8_t>(buf, len, reinterpret_cast<uint8_t*>(latin1_output));
+  size_t saved_bytes = ret.second - latin1_output;
+  const char* end = buf + len;
+  if (ret.first == end) {
+    return saved_bytes;
+  }
+
+  // Note: AVX512 procedure looks up 4 bytes forward, and
+  //       correctly converts multi-byte chars even if their
+  //       continuation bytes lie outsiede 16-byte window.
+  //       It meas, we have to skip continuation bytes from
+  //       the beginning ret.first, as they were already consumed.
+  while (ret.first != end && ((uint8_t(*ret.first) & 0xc0) == 0x80)) {
+      ret.first += 1;
+  }
+
+  if (ret.first != end) {
+    const size_t scalar_saved_bytes = scalar::utf8_to_latin1::convert_valid(
+                                        ret.first, len - (ret.first - buf), reinterpret_cast<char*>(ret.second));
+    if (scalar_saved_bytes == 0) { return 0; }
+    saved_bytes += scalar_saved_bytes;
+  }
+
+  return saved_bytes;
 }
 
 simdutf_warn_unused size_t implementation::convert_utf8_to_utf16le(const char* buf, size_t len, char16_t* utf16_output) const noexcept {
@@ -668,7 +692,7 @@ simdutf_warn_unused size_t implementation::convert_valid_utf8_to_utf32(const cha
   // Note: AVX512 procedure looks up 4 bytes forward, and
   //       correctly converts multi-byte chars even if their
   //       continuation bytes lie outside 16-byte window.
-  //       It meas, we have to skip continuation bytes from
+  //       It means, we have to skip continuation bytes from
   //       the beginning ret.first, as they were already consumed.
   while (ret.first != end && ((uint8_t(*ret.first) & 0xc0) == 0x80)) {
       ret.first += 1;

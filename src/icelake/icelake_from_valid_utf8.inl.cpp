@@ -21,7 +21,8 @@ template <endianness big_endian, typename OUTPUT>
 std::pair<const char*, OUTPUT*> valid_utf8_to_fixed_length(const char* str, size_t len, OUTPUT* dwords) {
     constexpr bool UTF32 = std::is_same<OUTPUT, uint32_t>::value;
     constexpr bool UTF16 = std::is_same<OUTPUT, char16_t>::value;
-    static_assert(UTF32 or UTF16, "output type has to be uint32_t (for UTF-32) or char16_t (for UTF-16)");
+    constexpr bool LATIN1 = std::is_same<OUTPUT, uint8_t>::value;
+    static_assert(UTF32 or UTF16 or LATIN1, "output type has to be uint32_t (for UTF-32), char16_t (for UTF-16) or uint8_t (for latin1)");
     static_assert(!(UTF32 and big_endian), "we do not currently support big-endian UTF-32");
 
     __m512i byteflip = _mm512_setr_epi64(
@@ -49,7 +50,7 @@ std::pair<const char*, OUTPUT*> valid_utf8_to_fixed_length(const char* str, size
         const __m512i v_80 = _mm512_set1_epi8(char(0x80));
         const __mmask64 ascii = _mm512_test_epi8_mask(utf8, v_80);
         if(ascii == 0) {
-            SIMDUTF_ICELAKE_STORE_ASCII(UTF32, utf8, output)
+            SIMDUTF_ICELAKE_STORE_ASCII( utf8, output)
             output += 64;
             ptr += 64;
             continue;
@@ -100,7 +101,7 @@ std::pair<const char*, OUTPUT*> valid_utf8_to_fixed_length(const char* str, size
         const __m512i v_80 = _mm512_set1_epi8(char(0x80));
         const __mmask64 ascii = _mm512_test_epi8_mask(utf8, v_80);
         if(ascii == 0) {
-            SIMDUTF_ICELAKE_STORE_ASCII(UTF32, utf8, output)
+            SIMDUTF_ICELAKE_STORE_ASCII( utf8, output)
             output += 64;
             ptr += 64;
         } else {
@@ -132,5 +133,6 @@ std::pair<const char*, OUTPUT*> valid_utf8_to_fixed_length(const char* str, size
     return {ptr, output};
 }
 
-
 using utf8_to_utf16_result = std::pair<const char*, char16_t*>;
+using utf8_to_latin1_result = std::pair<const char*, uint8_t*>;
+
