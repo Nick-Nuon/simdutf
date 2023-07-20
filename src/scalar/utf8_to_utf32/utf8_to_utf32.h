@@ -30,15 +30,15 @@ inline size_t convert(const char* buf, size_t len, char32_t* utf32_output) {
     uint8_t leading_byte = data[pos]; // leading byte
     if (leading_byte < 0b10000000) {
       // converting one ASCII byte !!!
-      *utf32_output++ = char32_t(leading_byte);
+      *utf32_output++ = char32_t(leading_byte); // one byte is direct
       pos++;
-    } else if ((leading_byte & 0b11100000) == 0b11000000) {
+    } else if ((leading_byte & 0b11100000) == 0b11000000) { 
       // We have a two-byte UTF-8
       if(pos + 1 >= len) { return 0; } // minimal bound checking
-      if ((data[pos + 1] & 0b11000000) != 0b10000000) { return 0; }
+      if ((data[pos + 1] & 0b11000000) != 0b10000000) { return 0; } // check if it is followed by one continuation
       // range check
-      uint32_t code_point = (leading_byte & 0b00011111) << 6 | (data[pos + 1] & 0b00111111);
-      if (code_point < 0x80 || 0x7ff < code_point) { return 0; }
+      uint32_t code_point = (leading_byte & 0b00011111) << 6 | (data[pos + 1] & 0b00111111); 
+      if (code_point < 0x80) { return 0; } //check if code_point makes sense
       *utf32_output++ = char32_t(code_point);
       pos += 2;
     } else if ((leading_byte & 0b11110000) == 0b11100000) {

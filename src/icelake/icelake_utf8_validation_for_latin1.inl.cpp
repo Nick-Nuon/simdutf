@@ -1,7 +1,7 @@
 // file included directly
 
 // Detect all invalid 2-byte sequences at once 
-simdutf_really_inline __m512i check_special_cases(__m512i input, const __m512i prev1) {
+simdutf_really_inline __m512i check_special_cases_for_latin1(__m512i input, const __m512i prev1) {
 
 
   /* Possible values for high nibbles of first bytes: 
@@ -25,37 +25,42 @@ simdutf_really_inline __m512i check_special_cases(__m512i input, const __m512i p
 // The high and low nibbles of each byte, as well as the low nibble of the next byte, are looked
 // up in their respective tables. 
 
+// ASCII =>            => 0000 0010
+// continuation        => 1000 0000
+// 2-bytes (# 1100)    => 0010 0001 Scenario a) code points starts by 0 XXXX XXXXXX
+//         (# 1101)    => 1111 1111 => Everything else is sure to go bust.
+// 3-bytes             => 1111 1111 => Goes bust. Not Latin1
+// 4-bytes             => 1111 1111 => Goes bust. Not Latin1
   __m512i mask1 = _mm512_setr_epi64(
-        0x0202020202020202, // ASCII =>            => 0000 0010
-        0x4915012180808080, // continuation        => 1000 0000
-        0x0202020202020202, // 2-bytes (# 1100)    => 0010 0001 Scenario a) code points starts by 0 XXXX XXXXXX
-                            //         (# 1101)    => 0000 0001 Scenario b) code points starts by 1 XXXX XXXXXX
-        0x4915012180808080, // 3-bytes             => 0001 0101
-        0x0202020202020202, // 4-bytes             => 0100 1001
-        0x4915012180808080,
+        0x0202020202020202, 
+        0xFFFFFF1280808080, 
+        0x0202020202020202, 
+        0xFFFFFF1280808080, 
+        0x0202020202020202, 
+        0xFFFFFF1280808080,
         0x0202020202020202,
-        0x4915012180808080);
+        0xFFFFFF1280808080);
     const __m512i v_0f = _mm512_set1_epi8(0x0f);
     __m512i index1 = _mm512_and_si512(_mm512_srli_epi16(prev1, 4), v_0f); // take the high nibble of last byte of previous input
 
     __m512i byte_1_high = _mm512_shuffle_epi8(mask1, index1); 
 
+
+/*  The low nibble get assigned as such: 
+    0000 => 1110 0111 <- failure case for high nibble #1100 ... code point is lower than 0x80
+    0001 => 1010 0011 <- failure case for high nibble #1100 ... code point is lower than 0x80
+    0010 => 1000 0011
+    0011 => 1000 0011 
+    else => 1110 1011  <- failure case for high nibble #1100 ... code point is greater than  */
     __m512i mask2 = _mm512_setr_epi64(
-        0xcbcbcb8b8383a3e7, // 203 203 203 (139 131 131 163 231) => first five low nibbles are assigned numbers different then the rest, all else are the same (203)
-        0xcbcbdbcbcbcbcbcb, // 203 203 203 203 203 203 203 203 => e.g. everything that is not 
-        0xcbcbcb8b8383a3e7, // e.g. 
-/*                                0000 => 1110 0111 <- failure case for 2-byte #1100 ... 
-                                  0001 => 1010 0011 <- failure case for 2-byte #1100 ... 
-                                  0010 => 1000 0011
-                                  0011 => 1000 0011 
-                                  0100 => 1000 1011
-                                  else => 1100 1011
-                                  */
-        0xcbcbdbcbcbcbcbcb,
-        0xcbcbcb8b8383a3e7,
-        0xcbcbdbcbcbcbcbcb,
-        0xcbcbcb8b8383a3e7,
-        0xcbcbdbcbcbcbcbcb);
+        0xebebebab8383a3e7, 
+        0xebebebebebebebeb, 
+        0xebebebab8383a3e7, 
+        0xebebebebebebebeb,
+        0xebebebab8383a3e7,
+        0xebebebebebebebeb,
+        0xebebebab8383a3e7,
+        0xebebebebebebebeb);
      __m512i index2 = _mm512_and_si512(prev1, v_0f); // take the low nibble of last byte of previous input
 
     __m512i byte_1_low = _mm512_shuffle_epi8(mask2, index2);
@@ -80,23 +85,7 @@ simdutf_really_inline __m512i check_special_cases(__m512i input, const __m512i p
     return _mm512_ternarylogic_epi64(byte_1_high, byte_1_low, byte_2_high, 128); // returns true only when byte_1_high, byte_1_low and byte_2_high's leading bits are zeroes.
   }
 
-  // check for errors that involves 3 or 4 bytes units
-  simdutf_really_inline __m512i check_multibyte_lengths(const __m512i input,
-      const __m512i prev_input, const __m512i sc) {
-    __m512i prev2 = prev<2>(input, prev_input);
-    __m512i prev3 = prev<3>(input, prev_input);
-    __m512i is_third_byte  = _mm512_subs_epu8(prev2, _mm512_set1_epi8(0b11100000u-1)); // Only 111_____ will be > 0, the rest is zero
-    __m512i is_fourth_byte  = _mm512_subs_epu8(prev3, _mm512_set1_epi8(0b11110000u-1)); // Only 1111____ will be > 0, the rest is zero
-    __m512i is_third_or_fourth_byte = _mm512_or_si512(is_third_byte, is_fourth_byte);
-    const __m512i v_7f = _mm512_set1_epi8(char(0x7f)); 
-    is_third_or_fourth_byte = _mm512_adds_epu8(v_7f, is_third_or_fourth_byte);  // Wnat to know whether or not the bit is < 128
-    // We want to compute (is_third_or_fourth_byte AND v80) XOR sc.
-    const __m512i v_80 = _mm512_set1_epi8(char(0x80));
-    return _mm512_ternarylogic_epi32(is_third_or_fourth_byte, v_80, sc, 0b1101010);
-    //__m512i is_third_or_fourth_byte_mask = _mm512_and_si512(is_third_or_fourth_byte, v_80);
-    //return _mm512_xor_si512(is_third_or_fourth_byte_mask, sc);
-  }
-  //
+/*   //
   // Return nonzero if there are incomplete multibyte characters at the end of the block:
   // e.g. if there is a 4-byte character, but it's 3 bytes from the end.
   //
@@ -113,9 +102,9 @@ simdutf_really_inline __m512i check_special_cases(__m512i input, const __m512i p
         0xffffffffffffffff,
         0xbfdfefffffffffff);
     return _mm512_subs_epu8(input, max_value);
-  }
+  } */
 
-  struct avx512_utf8_checker {
+  struct avx512_utf8_to_latin1_checker {
     // If this is nonzero, there has been a UTF-8 error.
     __m512i error{};
 
@@ -125,18 +114,15 @@ simdutf_really_inline __m512i check_special_cases(__m512i input, const __m512i p
     __m512i prev_incomplete{};
 
     //
-    // Check whether the current bytes are valid UTF-8.
+    // Check whether the current UTF-8 bytes can be converted to latin1
     //
     simdutf_really_inline void check_utf8_bytes(const __m512i input, const __m512i prev_input) {
       // Flip prev1...prev3 so we can easily determine if they are 2+, 3+ or 4+ lead bytes
       // (2, 3, 4-byte leads become large positive numbers instead of small negative numbers)
       __m512i prev1 = prev<1>(input, prev_input); // There will always be a pair of bytes straddling the two SIMD registers, which need to be validated as well.
       // After loading v1 , we detect all invalid 2-byte sequences at once 
-      __m512i sc = check_special_cases(input, prev1);
-      // All remaining checks are invalid 3–4 byte sequences, which either have too many continuations, or not enough
-      this->error = _mm512_or_si512(check_multibyte_lengths(input, prev_input, sc), this->error);
+      this->error = check_special_cases_for_latin1(input, prev1);
     }
-
 
     // The only problem that can happen at EOF is that a multibyte character is too short
     // or a byte value too large in the last bytes: check_special_cases only checks for bytes
@@ -166,4 +152,4 @@ simdutf_really_inline __m512i check_special_cases(__m512i input, const __m512i p
         return _mm512_test_epi8_mask(this->error, this->error) != 0;
     }
 
-  }; // struct avx512_utf8_checker
+  }; // struct avx512_utf8_to_latin1_checker

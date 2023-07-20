@@ -81,14 +81,18 @@
                     _mm512_storeu_si512((__m512i*)output, out);                                              \
                 }                                                                                            \
                 output += valid_count;                                                                       \
-            } else {                                                                                         \
+            } else if (UTF16) {                                                                                         \
                 if(MASKED) {                                                                                 \
                     output += utf32_to_utf16_masked<big_endian>(byteflip, out, valid_count, reinterpret_cast<char16_t *>(output)); \
                 } else {                                                                                     \
                     output += utf32_to_utf16<big_endian>(byteflip, out, valid_count, reinterpret_cast<char16_t *>(output));        \
                 }                                                                                            \
-            }                                                                                                \
+                                                                                                            \
+            } else {                                                                                         \
+                _mm512_storeu_si512((__m512i*)output, out);                                                \
+            }\
         }
+        
 
 #define SIMDUTF_ICELAKE_WRITE_UTF16_OR_UTF32(INPUT, VALID_COUNT, MASKED)                                    \
 {                                                                                                           \

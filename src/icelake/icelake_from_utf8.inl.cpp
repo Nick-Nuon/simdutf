@@ -1,5 +1,4 @@
 // file included directly
-
 // File contains conversion procedure from possibly invalid UTF-8 strings.
 
 /**
@@ -54,7 +53,7 @@ std::pair<const char*, OUTPUT*> validating_utf8_to_fixed_length(const char* str,
     constexpr bool UTF32 = std::is_same<OUTPUT, uint32_t>::value;
     constexpr bool UTF16 = std::is_same<OUTPUT, char16_t>::value;
     constexpr bool LATIN1 = std::is_same<OUTPUT, uint8_t>::value;
-    static_assert(UTF32 or UTF16, "output type has to be uint32_t (for UTF-32) or char16_t (for UTF-16)");
+    static_assert(UTF32 or UTF16 or LATIN1, "output type has to be uint32_t (for UTF-32),char16_t (for UTF-16), or uint8_t (for Latin-1)");
     static_assert(!(UTF32 and big_endian), "we do not currently support big-endian UTF-32");
 
     const char* ptr = str;
@@ -70,7 +69,9 @@ std::pair<const char*, OUTPUT*> validating_utf8_to_fixed_length(const char* str,
             0x0e0f0c0d0a0b0809
         );
     OUTPUT* output = dwords;
+
     avx512_utf8_checker checker{};
+
     /**
      * In the main loop, we consume 64 bytes per iteration,
      * but we access 64 + 4 bytes.

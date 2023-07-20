@@ -345,6 +345,7 @@ namespace simdutf { namespace tests { namespace helpers {
       printf("wrong saved bytes value: procedure returned %zu bytes, it should be %zu\n",
              size_t(saved_chars), size_t(reference_output_latin1.size()));
 
+      dump("input:",input_utf8);
       dump("expected :", reference_output_latin1);
       dump("actual   :", output_latin1);
       return false;
