@@ -336,7 +336,7 @@ namespace simdutf { namespace tests { namespace helpers {
     auto dump = [saved_chars](const char* title, const std::vector<char>& array) {
       printf("%s", title);
       for (size_t i=0; i < saved_chars; i++) {
-        printf(" %02x", (char)array[i]);
+        printf(" %02x", (unsigned char)array[i]);
       }
       putchar('\n');
     };

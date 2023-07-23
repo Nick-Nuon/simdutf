@@ -19,6 +19,7 @@
 */
 template <endianness big_endian, typename OUTPUT>
 std::pair<const char*, OUTPUT*> valid_utf8_to_fixed_length(const char* str, size_t len, OUTPUT* dwords) {
+    std::cout << "Length:" << len <<std::endl;
     constexpr bool UTF32 = std::is_same<OUTPUT, uint32_t>::value;
     constexpr bool UTF16 = std::is_same<OUTPUT, char16_t>::value;
     constexpr bool LATIN1 = std::is_same<OUTPUT, uint8_t>::value;
@@ -39,6 +40,7 @@ std::pair<const char*, OUTPUT*> valid_utf8_to_fixed_length(const char* str, size
     const char* end = ptr + len;
 
     OUTPUT* output = dwords;
+
     /**
      * In the main loop, we consume 64 bytes per iteration,
      * but we access 64 + 4 bytes.
@@ -120,14 +122,34 @@ std::pair<const char*, OUTPUT*> valid_utf8_to_fixed_length(const char* str, size
             } else {
                 vec0 = expand_utf8_to_utf32(vec0);
                 vec1 = expand_utf8_to_utf32(vec1);
+                std::cout << "This is vec0 prior to WRITE_UTF17_OR_UTF32: ";  
+                print_vector_as_utf32(vec0);
+                std::cout << "This is vec1: "; 
+                print_vector_as_utf32(vec1);
+
                 SIMDUTF_ICELAKE_WRITE_UTF16_OR_UTF32(vec0, valid_count0, true)
                 SIMDUTF_ICELAKE_WRITE_UTF16_OR_UTF32(vec1, valid_count1, true)
+                                
+                std::cout << "AFTER WRITE_UTF17_OR_UTF32: ";  
+
+
+
             }
 
             const __m512i lane3 = broadcast_epi128<3>(utf8);
             SIMDUTF_ICELAKE_TRANSCODE16(lane2, lane3, true)
 
             ptr += 3*16;
+
+/*                 auto printValues = [ptr, output]() {
+                    for (const OUTPUT* ptr2 = reinterpret_cast<const OUTPUT*>(ptr); ptr2 < output; ++ptr2) {
+                        printf("%x ", *ptr2);
+                    }
+                    printf("\n");
+                };
+
+                std::cout << "dwords: " << static_cast<void*>(dwords) << " output: " << static_cast<void*>(output) << std::endl;
+                printValues(); */
         }
     }
     return {ptr, output};

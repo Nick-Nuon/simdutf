@@ -40,6 +40,39 @@
         ]
 */
 
+
+
+void print_vector_as_latin1(__m512i vec) {
+    auto buffer = std::array<uint8_t, 64>{};  // Latin1/UTF-8 represented by uint8_t
+    _mm512_storeu_si512(buffer.data(), vec);
+    for (size_t i = 0; i < 64; i++) {
+        std::cout << static_cast<char>(buffer[i]) << ' ';
+    }
+    std::cout << '\n';
+}
+
+void print_vector_as_utf16(__m512i vec) {
+    auto buffer = std::array<uint16_t, 32>{};  // UTF-16 represented by uint16_t
+    _mm512_storeu_si512(buffer.data(), vec);
+    for (size_t i = 0; i < 32; i++) {
+        std::cout << static_cast<char16_t>(buffer[i]) << ' ';
+    }
+    std::cout << '\n';
+}
+
+void print_vector_as_utf32(__m512i vec) {
+    auto buffer = std::array<uint32_t, 16>{};  // UTF-32 represented by uint32_t
+    _mm512_storeu_si512(buffer.data(), vec);
+    for (size_t i = 0; i < 16; i++) {
+        //std::cout << static_cast<char32_t>(buffer[i]) << ' ';
+        printf("%02x ", buffer[i]);
+    }
+    std::cout << '\n';
+}
+
+
+
+
 #define SIMDUTF_ICELAKE_TRANSCODE16(LANE0, LANE1, MASKED)                                                    \
         {                                                                                                    \
             const __m512i merged = _mm512_mask_mov_epi32(LANE0, 0x1000, LANE1);                              \
@@ -72,6 +105,8 @@
             const __m512i utf32 = expanded_utf8_to_utf32(char_class, input);                                 \
                                                                                                              \
             const __m512i out = _mm512_mask_compress_epi32(_mm512_setzero_si512(), leading_bytes, utf32);    \
+            std::cout << "This is out: "; \
+            print_vector_as_utf32(out);\
                                                                                                              \
             if (UTF32) {                                                                                     \
                 if(MASKED) {                                                                                 \
@@ -88,9 +123,15 @@
                     output += utf32_to_utf16<big_endian>(byteflip, out, valid_count, reinterpret_cast<char16_t *>(output));        \
                 }                                                                                            \
                                                                                                             \
-            } else {                                                                                         \
-                _mm512_storeu_si512((__m512i*)output, out);                                                \
-            }\
+            } else {         \
+                std::cout << "This is TRANSCODE16!\n" ; std::cout << "this is masked:" << MASKED << std::endl; \
+                if(MASKED) {                                                                                        \
+                    const __mmask16 valid_mask = uint16_t((1 << valid_count) - 1);                                  \
+                    _mm512_mask_storeu_epi32((__m512i*)output, valid_mask, out);                                  \
+                } else {                                                                                            \
+                    _mm512_storeu_epi8((__m512i*)(output),out);                                              \
+                }       \    
+            } \
         }
         
 
@@ -110,8 +151,16 @@
         } else {                                                                                            \
             output += utf32_to_utf16<big_endian>(byteflip, INPUT, VALID_COUNT, reinterpret_cast<char16_t *>(output));             \
         }                                                                                                   \
-    } else { \
-        _mm512_storeu_si512((__m512i*)output, INPUT); \
+    } else {         \
+        std::cout << "This is WRITE_UTF16_or_UTF32!\n" ; std::cout << "this is masked:" << MASKED << std::endl;\
+        if(MASKED) {                                                                                        \
+            const __mmask16 valid_mask = uint16_t((1 << VALID_COUNT) - 1);                                  \
+            __m512i temp = _mm512_maskz_compress_epi32(valid_mask,INPUT);\
+            temp = _mm512_cvtepi32_epi8(temp);\
+            _mm512_storeu_epi8((__m512i*)(output),temp);                                              \
+        } else {                                                                                            \
+            _mm512_storeu_epi8((__m512i*)(output),INPUT);                                              \
+        }       \    
     } \
 }
 
