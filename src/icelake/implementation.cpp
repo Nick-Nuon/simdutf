@@ -31,8 +31,7 @@ namespace {
 
 #include "icelake/icelake_utf8_validation_for_latin1.inl.cpp"
 #include "icelake/icelake_from_utf8_to_latin1.inl.cpp"
-
-
+#include "icelake/icelake_convert_utf32_to_latin1.inl.cpp"
 
 #include <cstdint>
 
@@ -818,7 +817,17 @@ simdutf_warn_unused result implementation::convert_utf32_to_latin1_with_errors(c
 }
 
 simdutf_warn_unused size_t implementation::convert_valid_utf32_to_latin1(const char32_t* buf, size_t len, char* latin1_output) const noexcept {
-  return scalar::utf32_to_latin1::convert_valid(buf,len,latin1_output);
+  std::pair<const char32_t*, char*> ret = avx512_valid_convert_utf32_to_latin1(buf, len, latin1_output);
+  if (ret.first == nullptr) { return 0; }
+  size_t saved_bytes = ret.second - latin1_output;
+  if (ret.first != buf + len) {
+    //std::cout << len - (ret.first - buf) << std::endl;
+    const size_t scalar_saved_bytes = scalar::utf32_to_latin1::convert_valid(
+                                        ret.first, len - (ret.first - buf), ret.second);
+    if (scalar_saved_bytes == 0) { return 0; }
+    saved_bytes += scalar_saved_bytes;
+  }
+  return saved_bytes;
 }
 
 

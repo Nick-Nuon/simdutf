@@ -105,7 +105,7 @@ void print_vector_as_utf32(__m512i vec) {
             const __m512i utf32 = expanded_utf8_to_utf32(char_class, input);                                 \
                                                                                                              \
             const __m512i out = _mm512_mask_compress_epi32(_mm512_setzero_si512(), leading_bytes, utf32);    \
-            std::cout << "This is out: "; \
+            std::cout << "\nThis is UTF-32 Conversion after transcode: "; \
             print_vector_as_utf32(out);\
                                                                                                              \
             if (UTF32) {                                                                                     \
@@ -127,7 +127,7 @@ void print_vector_as_utf32(__m512i vec) {
                 std::cout << "This is TRANSCODE16!\n" ; std::cout << "this is masked:" << MASKED << std::endl; \
                 if(MASKED) {                                                                                        \
                     const __mmask16 valid_mask = uint16_t((1 << valid_count) - 1);                                  \
-                    _mm512_mask_storeu_epi32((__m512i*)output, valid_mask, out);                                  \
+                    _mm512_mask_cvtepi32_storeu_epi8((__m512i*)(output),valid_mask,out);\
                 } else {                                                                                            \
                     _mm512_storeu_epi8((__m512i*)(output),out);                                              \
                 }       \    
@@ -155,9 +155,7 @@ void print_vector_as_utf32(__m512i vec) {
         std::cout << "This is WRITE_UTF16_or_UTF32!\n" ; std::cout << "this is masked:" << MASKED << std::endl;\
         if(MASKED) {                                                                                        \
             const __mmask16 valid_mask = uint16_t((1 << VALID_COUNT) - 1);                                  \
-            __m512i temp = _mm512_maskz_compress_epi32(valid_mask,INPUT);\
-            temp = _mm512_cvtepi32_epi8(temp);\
-            _mm512_storeu_epi8((__m512i*)(output),temp);                                              \
+            _mm512_mask_cvtepi32_storeu_epi8((__m512i*)(output),valid_mask,INPUT);\
         } else {                                                                                            \
             _mm512_storeu_epi8((__m512i*)(output),INPUT);                                              \
         }       \    
