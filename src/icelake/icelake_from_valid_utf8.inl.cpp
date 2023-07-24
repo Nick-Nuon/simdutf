@@ -122,21 +122,19 @@ std::pair<const char*, OUTPUT*> valid_utf8_to_fixed_length(const char* str, size
             } else {
                 vec0 = expand_utf8_to_utf32(vec0);
                 vec1 = expand_utf8_to_utf32(vec1);
-                std::cout << "This is vec0 prior to WRITE_UTF17_OR_UTF32: ";  
+                std::cout << "This is vec0 prior to WRITE_UTF16_OR_UTF32: ";  
                 print_vector_as_utf32(vec0);
                 std::cout << "This is vec1: "; 
                 print_vector_as_utf32(vec1);
 
                 SIMDUTF_ICELAKE_WRITE_UTF16_OR_UTF32(vec0, valid_count0, true)
                 SIMDUTF_ICELAKE_WRITE_UTF16_OR_UTF32(vec1, valid_count1, true)
-                                
-                std::cout << "AFTER WRITE_UTF17_OR_UTF32: ";  
-
 
 
             }
 
             const __m512i lane3 = broadcast_epi128<3>(utf8);
+            std::cout << "TEST!TEST!\n";
             SIMDUTF_ICELAKE_TRANSCODE16(lane2, lane3, true)
 
             ptr += 3*16;
@@ -147,9 +145,47 @@ std::pair<const char*, OUTPUT*> valid_utf8_to_fixed_length(const char* str, size
                     }
                     printf("\n");
                 };
+ */
 
-                std::cout << "dwords: " << static_cast<void*>(dwords) << " output: " << static_cast<void*>(output) << std::endl;
-                printValues(); */
+/*             auto printValues = [ptr, output]() {
+                for (const OUTPUT* ptr2 = reinterpret_cast<const OUTPUT*>(ptr); ptr2 < output; ++ptr2) {
+                    printf("%02x ", static_cast<unsigned int>(*ptr2));
+                    if ((ptr2 - ptr + 1) % 16 == 0) {  // Insert a newline every 16 bytes
+                        printf("\n");
+                    }
+                }
+                printf("\n");
+            }; */
+
+            auto printValues = [ptr, output]() {
+                for (const char* ptr2 = ptr; ptr2 < reinterpret_cast<const char*>(output); ++ptr2) {
+                    printf("%02x ", static_cast<unsigned char>(*ptr2));
+                    if ((ptr2 - ptr + 1) % 16 == 0) {  // Insert a newline every 16 bytes
+                        printf("\n");
+                    }
+                }
+                printf("\n");
+            };
+
+
+
+
+/* 
+auto printValues = [ptr, output]() {
+    using OUTPUT = std::remove_const_t<std::remove_pointer_t<decltype(ptr)>>;
+    std::cout << std::hex;
+    for (const OUTPUT* ptr2 = reinterpret_cast<const OUTPUT*>(ptr); ptr2 < output; ++ptr2) {
+        std::cout << std::setw(2) << std::setfill('0') << static_cast<unsigned int>(*ptr2) << " ";
+        if ((ptr2 - ptr + 1) % 16 == 0) {  // Insert a newline every 16 bytes
+            std::cout << "\n";
+        }
+    }
+    std::cout << std::dec << "\n";  // Reset to decimal output
+};
+ */
+
+                // std::cout << "dwords: " << static_cast<void*>(dwords) << " output: " << static_cast<void*>(output) << std::endl;
+                printValues();
         }
     }
     return {ptr, output};
