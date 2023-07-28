@@ -631,16 +631,28 @@ simdutf_really_inline __m512i expanded_utf8_to_utf32(__m512i char_class, __m512i
 }
 
 
+
+/* const __m512i expand_ver2 = _mm512_setr_epi64(
+                0x  0403  0201    0302  0100,
+                0x  0605  0403    0504  0302,
+                0x  0807  0605    0706  0504,//
+                0x  0a09  0807    0908  0706,
+                0x  (0c0b  0a09)    0b0a  0908,//
+                0x  (0e0d  0c0b)    (0d0c  0b0a),
+                0x  000f  0e0d    (0f0e  0d0c), //part in parentheses is switched /w lane 1. 
+                0x  0201  000f    0100  0f0e
+    ); */
+
 simdutf_really_inline __m512i expand_and_identify(__m512i lane0, __m512i lane1, int &count) {
     const __m512i merged = _mm512_mask_mov_epi32(lane0, 0x1000, lane1);
     const __m512i expand_ver2 = _mm512_setr_epi64(
                 0x0403020103020100,
                 0x0605040305040302,
-                0x0807060507060504,
+                0x0807060507060504,//
                 0x0a09080709080706,
-                0x0c0b0a090b0a0908,
+                0x0c0b0a090b0a0908,//
                 0x0e0d0c0b0d0c0b0a,
-                0x000f0e0d0f0e0d0c,
+                0x000f0e0d0f0e0d0c, //part in parentheses is switched /w lane 1. 
                 0x0201000f01000f0e
     );
     const __m512i input = _mm512_shuffle_epi8(merged, expand_ver2);
@@ -652,11 +664,223 @@ simdutf_really_inline __m512i expand_and_identify(__m512i lane0, __m512i lane1, 
     return  _mm512_mask_compress_epi32(_mm512_setzero_si512(), leading_bytes, input);
 }
 
+
+
+/*     const __m512i expand_ver2 = _mm512_setr_epi64(
+                0x0403  0302  0201  0100,
+                0x0908  0708  0605  0504,
+                0x0d0c  0c0b  0b0a  0a09,
+                0x0a09  0807 // 0f0e  0e0d,
+                0x0c0b  0a09  0b0a  0908,
+                0x0e0d  0c0b  0d0c  0b0a,
+                0x000f  0e0d  0f0e  0d0c,
+                0x0201  000f  0100  0f0e
+    ); */
+
+simdutf_really_inline __m512i expand_and_identify_latin1(__m512i lane0, __m512i lane1, int &count) {
+    // e.g. in a 512-bit register, We have UTF32 units #: 0 1 2 3 | 4 5 6 7 | 8 9 a b | (c) d e f <= c is swapped /w the #c in the lane if second argument
+    // it is equivalent to picking the first UTF32 unit of the 128-bit lane 1.
+    const __m512i merged = _mm512_mask_mov_epi32(lane0, 0x1000, lane1);     
+    const __m512i expand_ver2 = _mm512_setr_epi64(
+                0x0403  0302  0201  0100,
+                0x0908  0708  0605  0504,
+                0x0d0c  0c0b  0b0a  0a09,
+                0x0a09  0807 // 0f0e  0e0d,
+                0x0c0b  0a09  0b0a  0908,
+                0x0e0d  0c0b  0d0c  0b0a,
+                0x000f  0e0d  0f0e  0d0c,
+                0x0201  000f  0100  0f0e
+    );
+    const __m512i input = _mm512_shuffle_epi8(merged, expand_ver2); //this  according to expand_ver2
+    const __m512i v_0000_00c0 = _mm512_set1_epi32(0xc0); // 1100 0000
+    const __m512i t0 = _mm512_and_si512(input, v_0000_00c0); //get the first two bit of each byte
+    const __m512i v_0000_0080 = _mm512_set1_epi32(0x80); // 1000 0000
+    const __mmask16 leading_bytes = _mm512_cmpneq_epu32_mask(t0, v_0000_0080);// a mask to say which bytes are leading bytes. 
+    count = static_cast<int>(count_ones(leading_bytes)); // this is a side effect: we could how many leading bytes there are. 
+    // This will be useful later. 
+    return  _mm512_mask_compress_epi32(_mm512_setzero_si512(), leading_bytes, input); // we return only the leading bytes, with the remainder set to zero
+}
+
 simdutf_really_inline __m512i expand_utf8_to_utf32(__m512i input) {
     __m512i char_class = _mm512_srli_epi32(input, 4);
     /*  char_class = ((input >> 4) & 0x0f) | 0x80808000 */
-    const __m512i v_0000_000f = _mm512_set1_epi32(0x0f);
-    const __m512i v_8080_8000 = _mm512_set1_epi32(0x80808000);
-    char_class = _mm512_ternarylogic_epi32(char_class, v_0000_000f, v_8080_8000, 0xea);
+    const __m512i v_0000_000f = _mm512_set1_epi32(0x0f); // for each utf32 unit, get the lead nibble
+    const __m512i v_8080_8000 = _mm512_set1_epi32(0x80808000);  // we want the first bit of each byte save the first head nibble.
+
+/* This step combines the char_class, v_0000_000f and v_8080_8000 in such a way to set 
+the highest bit of each byte (except for the first one) 
+and retain the highest 4 bits of each byte.
+
+E.g. bbbb bbbb bbbb bbbb bbbb bbbb aaaa bbbb => 1000 0000 1000 0000 1000 0000 0000 aaaa
+
+  char_class | v_0000_000f  | v_08080_8000 | 0xea
+  --------------------------------------------------
+       0 	   |      0 	    |     0 	     |  0 
+       0 	   |      0 	    |     1 	     |  1  
+       0 	   |      1 	    |     0 	     |  0
+       0 	   |      1 	    |     1 	     |  1  
+       1 	   |      0 	    |     0 	     |  0
+       1 	   |      0 	    |     1 	     |  1  
+       1 	   |      1 	    |     0 	     |  1
+       1 	   |      1 	    |     1 	     |  1  
+ 	 */
+    
+    char_class = _mm512_ternarylogic_epi32(char_class, v_0000_000f, v_8080_8000, 0xea); 
     return expanded_utf8_to_utf32(char_class, input);
+}
+
+simdutf_really_inline __m512i expand_utf16_to_latin1(__m512i input) {
+    __m512i char_class = _mm512_srli_epi16(input, 4);
+    /*  char_class = ((input >> 4) & 0x0f) | 0x8000 */
+    const __m512i v_000f = _mm512_set1_epi16(0x0f); // for each utf16 unit, get the lead nibble
+    const __m512i v_8000 = _mm512_set1_epi16(0x8000);  // 1000 0000 0000 0000
+
+/* This step combines the char_class, v_000f and v_8000 in such a way to set 
+the highest bit of each byte (except for the first one) 
+and retain the highest 4 bits of each byte.
+
+E.g. bbbb bbbb bbbb bbbb bbbb bbbb aaaa bbbb => 1000 0000 1000 0000 1000 0000 0000 aaaa
+
+  char_class |    v_000f    |   v_8000     | 0xea
+  --------------------------------------------------
+       0 	   |      0 	    |     0 	     |  0 
+       0 	   |      0 	    |     1 	     |  1  
+       0 	   |      1 	    |     0 	     |  0
+       0 	   |      1 	    |     1 	     |  1  
+       1 	   |      0 	    |     0 	     |  0
+       1 	   |      0 	    |     1 	     |  1  
+       1 	   |      1 	    |     0 	     |  1
+       1 	   |      1 	    |     1 	     |  1  
+ 	 */
+    
+    char_class = _mm512_ternarylogic_epi16(char_class, v_0000_000f, v_8080_8000, 0xea); 
+    return expanded_utf16_to_latin1(char_class, input);
+}
+
+
+/*
+    expanded_utf16_to_latin1 converts expanded UTF-16 characters (`utf16`)
+    stored at separate 16-bit lanes.
+
+    For each lane we have also a character class (`char_class), given in form
+    0x800N, where N is 4 higest bits from the leading byte; 
+    0x80 resets corresponding bytes during pshufb. <= ??????
+*/
+simdutf_really_inline __m512i expanded_utf16_to_latin1(__m512i char_class, __m512i utf8) {
+    /*
+        Input:
+        - utf16: bytes stored at separate 16-bit words
+        - valid: which words have valid UTF-16 characters
+
+        Bit layout of single word. We show 2 cases for each possible
+        UTF-16 character encoding. The `?` denotes bits we must not
+        assume their value.
+
+        |10bb.bbbb|110a.aaaa| 2-byte char
+        |????.????|0aaa.aaaa| ASCII char
+          byte 1     byte 0
+    */
+
+    /* 1. Reset control bits of continuation bytes and the MSB
+          of the leading byte; this makes all bytes unsigned (and
+          does not alter ASCII char).
+
+        |00dd.dddd|00cc.cccc|00bb.bbbb|0111.0aaa| 4-byte char
+        |00??.????|00cc.cccc|00bb.bbbb|0110.aaaa| 3-byte char
+        |00??.????|00??.????|00bb.bbbb|010a.aaaa| 2-byte char
+        |00??.????|00??.????|00??.????|0aaa.aaaa| ASCII char
+         ^^        ^^        ^^        ^
+    */
+    __m512i values;
+    const __m512i v_3f3f_3f7f = _mm512_set1_epi32(0x3f3f3f7f);
+    values = _mm512_and_si512(utf8, v_3f3f_3f7f);
+
+    /* 2. Swap and join fields A-B and C-D
+
+        |0000.cccc|ccdd.dddd|0001.110a|aabb.bbbb| 4-byte char
+        |0000.cccc|cc??.????|0001.10aa|aabb.bbbb| 3-byte char
+        |0000.????|????.????|0001.0aaa|aabb.bbbb| 2-byte char
+        |0000.????|????.????|000a.aaaa|aa??.????| ASCII char */
+    const __m512i v_0140_0140 = _mm512_set1_epi32(0x01400140);
+    values = _mm512_maddubs_epi16(values, v_0140_0140);
+
+    /* 3. Swap and join fields AB & CD
+
+        |0000.0001|110a.aabb|bbbb.cccc|ccdd.dddd| 4-byte char
+        |0000.0001|10aa.aabb|bbbb.cccc|cc??.????| 3-byte char
+        |0000.0001|0aaa.aabb|bbbb.????|????.????| 2-byte char
+        |0000.000a|aaaa.aa??|????.????|????.????| ASCII char */
+    const __m512i v_0001_1000 = _mm512_set1_epi32(0x00011000);
+    values = _mm512_madd_epi16(values, v_0001_1000);
+
+    /* 4. Shift left the values by variable amounts to reset highest UTF-8 bits
+        |aaab.bbbb|bccc.cccd|dddd.d000|0000.0000| 4-byte char -- by 11
+        |aaaa.bbbb|bbcc.cccc|????.??00|0000.0000| 3-byte char -- by 10
+        |aaaa.abbb|bbb?.????|????.???0|0000.0000| 2-byte char -- by 9
+        |aaaa.aaa?|????.????|????.????|?000.0000| ASCII char -- by 7 */
+    {
+        /** pshufb
+
+        continuation = 0
+        ascii    = 7
+        _2_bytes = 9
+        _3_bytes = 10
+        _4_bytes = 11
+
+        shift_left_v3 = 4 * [
+            ascii, # 0000
+            ascii, # 0001
+            ascii, # 0010
+            ascii, # 0011
+            ascii, # 0100
+            ascii, # 0101
+            ascii, # 0110
+            ascii, # 0111
+            continuation, # 1000
+            continuation, # 1001
+            continuation, # 1010
+            continuation, # 1011
+            _2_bytes, # 1100
+            _2_bytes, # 1101
+            _3_bytes, # 1110
+            _4_bytes, # 1111
+        ] */
+        const __m512i shift_left_v3 = _mm512_setr_epi64(
+            0x0707070707070707,
+            0x0b0a090900000000,
+            0x0707070707070707,
+            0x0b0a090900000000,
+            0x0707070707070707,
+            0x0b0a090900000000,
+            0x0707070707070707,
+            0x0b0a090900000000
+        );
+
+        const __m512i shift = _mm512_shuffle_epi8(shift_left_v3, char_class);
+        values = _mm512_sllv_epi32(values, shift);
+    }
+
+    /* 5. Shift right the values by variable amounts to reset lowest bits
+        |0000.0000|000a.aabb|bbbb.cccc|ccdd.dddd| 4-byte char -- by 11
+        |0000.0000|0000.0000|aaaa.bbbb|bbcc.cccc| 3-byte char -- by 16
+        |0000.0000|0000.0000|0000.0aaa|aabb.bbbb| 2-byte char -- by 21
+        |0000.0000|0000.0000|0000.0000|0aaa.aaaa| ASCII char -- by 25 */
+    {
+        // 4 * [25, 25, 25, 25, 25, 25, 25, 25, 0, 0, 0, 0, 21, 21, 16, 11]
+        const __m512i shift_right = _mm512_setr_epi64(
+            0x1919191919191919,
+            0x0b10151500000000,
+            0x1919191919191919,
+            0x0b10151500000000,
+            0x1919191919191919,
+            0x0b10151500000000,
+            0x1919191919191919,
+            0x0b10151500000000
+        );
+
+        const __m512i shift = _mm512_shuffle_epi8(shift_right, char_class);
+        values = _mm512_srlv_epi32(values, shift);
+    }
+
+    return values;
 }
