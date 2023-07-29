@@ -54,9 +54,9 @@ std::pair<const char*, char*> valid_utf16_to_latin1(const char* str, size_t len,
         }
 
         // this is to store # of leading bits.
-        int valid_count0;
-        int valid_count1;
-        int valid_count2;
+        int leading_count0;
+        int leading_count1;
+        int leading_count2;
 
         // the 
         const __m512i lane0 = broadcast_epi128<0>(utf16); // the first 128 bits are repeated (or broadcasted) 4 times.
@@ -64,44 +64,44 @@ std::pair<const char*, char*> valid_utf16_to_latin1(const char* str, size_t len,
         const __m512i lane2 = broadcast_epi128<2>(utf16); // the third 128 bits are repeated 4 times.
         const __m512i lane3 = broadcast_epi128<3>(utf16); // the fourth 128 bits are repeated 4 times.
 
-        __m512i vec0 = expand_and_identify(lane0, lane1, valid_count0); //get the leading bits in the first lane merged /w the second
-        __m512i vec1 = expand_and_identify(lane1, lane2, valid_count1); //get the leading bits in the second lane merged /w the third
+        __m512i vec0 = expand_and_identify(lane0, lane1, leading_count0); //get the leading bits in the first lane merged /w the second
+        __m512i vec1 = expand_and_identify(lane1, lane2, leading_count1); //get the leading bits in the second lane merged /w the third
         
 
-        if(valid_count0 + valid_count1 <= 16) {
+        if(leading_count0 + leading_count1 <= 16) {
             //add the two vectors together
             vec0 = _mm512_mask_expand_epi32(vec0, 
                                             // this mask is to signal which is vec1 or vec2
                                             __mmask16((
-                                                        (1<<valid_count1) // e.g. if valid_count1 is 4, (1<<4) = 16 in binary is 10000
+                                                        (1<<leading_count1) // e.g. if leading_count1 is 4, (1<<4) = 16 in binary is 10000
                                                         -1) // ... and subtracting 1 gives 01111.
-                                                        <<valid_count0), //adds valid_count0 number of zeroes to the end of the mask
+                                                        <<leading_count0), //adds leading_count0 number of zeroes to the end of the mask
                                             vec1);
-            valid_count0 += valid_count1;
+            leading_count0 += leading_count1;
             vec0 = expand_utf8_to_utf32(vec0);
-            SIMDUTF_ICELAKE_WRITE_UTF16_OR_UTF32(vec0, valid_count0, false)
+            SIMDUTF_ICELAKE_WRITE_UTF16_OR_UTF32(vec0, leading_count0, false)
         } else {
             vec0 = expand_utf8_to_utf32(vec0);
             vec1 = expand_utf8_to_utf32(vec1);
-            SIMDUTF_ICELAKE_WRITE_UTF16_OR_UTF32(vec0, valid_count0, false)
-            SIMDUTF_ICELAKE_WRITE_UTF16_OR_UTF32(vec1, valid_count1, false)
+            SIMDUTF_ICELAKE_WRITE_UTF16_OR_UTF32(vec0, leading_count0, false)
+            SIMDUTF_ICELAKE_WRITE_UTF16_OR_UTF32(vec1, leading_count1, false)
         }
-        __m512i vec2 = expand_and_identify(lane2, lane3, valid_count2);
+        __m512i vec2 = expand_and_identify(lane2, lane3, leading_count2);
         uint32_t tmp1;
         ::memcpy(&tmp1, ptr + 64, sizeof(tmp1));
         const __m512i lane4 = _mm512_set1_epi32(tmp1);
-        int valid_count3;
-        __m512i vec3 = expand_and_identify(lane3, lane4, valid_count3);
-        if(valid_count2 + valid_count3 <= 16) {
-            vec2 = _mm512_mask_expand_epi32(vec2, __mmask16(((1<<valid_count3)-1)<<valid_count2), vec3);
-            valid_count2 += valid_count3;
+        int leading_count3;
+        __m512i vec3 = expand_and_identify(lane3, lane4, leading_count3);
+        if(leading_count2 + leading_count3 <= 16) {
+            vec2 = _mm512_mask_expand_epi32(vec2, __mmask16(((1<<leading_count3)-1)<<leading_count2), vec3);
+            leading_count2 += leading_count3;
             vec2 = expand_utf8_to_utf32(vec2);
-            SIMDUTF_ICELAKE_WRITE_UTF16_OR_UTF32(vec2, valid_count2, false)
+            SIMDUTF_ICELAKE_WRITE_UTF16_OR_UTF32(vec2, leading_count2, false)
         } else {
             vec2 = expand_utf8_to_utf32(vec2);
             vec3 = expand_utf8_to_utf32(vec3);
-            SIMDUTF_ICELAKE_WRITE_UTF16_OR_UTF32(vec2, valid_count2, false)
-            SIMDUTF_ICELAKE_WRITE_UTF16_OR_UTF32(vec3, valid_count3, false)
+            SIMDUTF_ICELAKE_WRITE_UTF16_OR_UTF32(vec2, leading_count2, false)
+            SIMDUTF_ICELAKE_WRITE_UTF16_OR_UTF32(vec3, leading_count3, false)
         }
         ptr += 4*16;
     }
@@ -117,21 +117,21 @@ std::pair<const char*, char*> valid_utf16_to_latin1(const char* str, size_t len,
         } else {
             const __m512i lane0 = broadcast_epi128<0>(utf16);
             const __m512i lane1 = broadcast_epi128<1>(utf16);
-            int valid_count0;
-            __m512i vec0 = expand_and_identify(lane0, lane1, valid_count0);
+            int leading_count0;
+            __m512i vec0 = expand_and_identify(lane0, lane1, leading_count0);
             const __m512i lane2 = broadcast_epi128<2>(utf16);
-            int valid_count1;
-            __m512i vec1 = expand_and_identify(lane1, lane2, valid_count1);
-            if(valid_count0 + valid_count1 <= 16) {
-                vec0 = _mm512_mask_expand_epi32(vec0, __mmask16(((1<<valid_count1)-1)<<valid_count0), vec1);
-                valid_count0 += valid_count1;
+            int leading_count1;
+            __m512i vec1 = expand_and_identify(lane1, lane2, leading_count1);
+            if(leading_count0 + leading_count1 <= 16) {
+                vec0 = _mm512_mask_expand_epi32(vec0, __mmask16(((1<<leading_count1)-1)<<leading_count0), vec1);
+                leading_count0 += leading_count1;
                 vec0 = expand_utf8_to_utf32(vec0);
-                SIMDUTF_ICELAKE_WRITE_UTF16_OR_UTF32(vec0, valid_count0, true)
+                SIMDUTF_ICELAKE_WRITE_UTF16_OR_UTF32(vec0, leading_count0, true)
             } else {
                 vec0 = expand_utf8_to_utf32(vec0);
                 vec1 = expand_utf8_to_utf32(vec1);
-                SIMDUTF_ICELAKE_WRITE_UTF16_OR_UTF32(vec0, valid_count0, true)
-                SIMDUTF_ICELAKE_WRITE_UTF16_OR_UTF32(vec1, valid_count1, true)
+                SIMDUTF_ICELAKE_WRITE_UTF16_OR_UTF32(vec0, leading_count0, true)
+                SIMDUTF_ICELAKE_WRITE_UTF16_OR_UTF32(vec1, leading_count1, true)
             }
 
             const __m512i lane3 = broadcast_epi128<3>(utf16);

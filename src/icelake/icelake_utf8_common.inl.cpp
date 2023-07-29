@@ -729,35 +729,6 @@ E.g. bbbb bbbb bbbb bbbb bbbb bbbb aaaa bbbb => 1000 0000 1000 0000 1000 0000 00
     return expanded_utf8_to_utf32(char_class, input);
 }
 
-simdutf_really_inline __m512i expand_utf16_to_latin1(__m512i input) {
-    __m512i char_class = _mm512_srli_epi16(input, 4);
-    /*  char_class = ((input >> 4) & 0x0f) | 0x8000 */
-    const __m512i v_000f = _mm512_set1_epi16(0x0f); // for each utf16 unit, get the lead nibble
-    const __m512i v_8000 = _mm512_set1_epi16(0x8000);  // 1000 0000 0000 0000
-
-/* This step combines the char_class, v_000f and v_8000 in such a way to set 
-the highest bit of each byte (except for the first one) 
-and retain the highest 4 bits of each byte.
-
-E.g. bbbb bbbb bbbb bbbb bbbb bbbb aaaa bbbb => 1000 0000 1000 0000 1000 0000 0000 aaaa
-
-  char_class |    v_000f    |   v_8000     | 0xea
-  --------------------------------------------------
-       0 	   |      0 	    |     0 	     |  0 
-       0 	   |      0 	    |     1 	     |  1  
-       0 	   |      1 	    |     0 	     |  0
-       0 	   |      1 	    |     1 	     |  1  
-       1 	   |      0 	    |     0 	     |  0
-       1 	   |      0 	    |     1 	     |  1  
-       1 	   |      1 	    |     0 	     |  1
-       1 	   |      1 	    |     1 	     |  1  
- 	 */
-    
-    char_class = _mm512_ternarylogic_epi16(char_class, v_0000_000f, v_8080_8000, 0xea); 
-    return expanded_utf16_to_latin1(char_class, input);
-}
-
-
 /*
     expanded_utf16_to_latin1 converts expanded UTF-16 characters (`utf16`)
     stored at separate 16-bit lanes.
