@@ -44,6 +44,8 @@ simdutf_really_inline simd8<bool> must_be_2_3_continuation(const simd8<uint8_t> 
 #include "haswell/avx2_validate_utf16.cpp"
 #include "haswell/avx2_validate_utf32le.cpp"
 
+#include "haswell/avx2_convert_utf8_to_latin1.cpp"
+
 #include "haswell/avx2_convert_utf8_to_utf16.cpp"
 #include "haswell/avx2_convert_utf8_to_utf32.cpp"
 
@@ -59,6 +61,9 @@ simdutf_really_inline simd8<bool> must_be_2_3_continuation(const simd8<uint8_t> 
 #include "generic/buf_block_reader.h"
 #include "generic/utf8_validation/utf8_lookup4_algorithm.h"
 #include "generic/utf8_validation/utf8_validator.h"
+// transcoding from UTF-8 to Latin1
+#include "generic/utf8_to_latin1/utf8_to_latin1.h"
+#include "generic/utf8_to_latin1/valid_utf8_to_latin1.h"
 // transcoding from UTF-8 to UTF-16
 #include "generic/utf8_to_utf16/valid_utf8_to_utf16.h"
 #include "generic/utf8_to_utf16/utf8_to_utf16.h"
@@ -178,7 +183,8 @@ simdutf_warn_unused size_t implementation::convert_latin1_to_utf32(const char* b
 
 
 simdutf_warn_unused size_t implementation::convert_utf8_to_latin1(const char* buf, size_t len, char* latin1_output) const noexcept {
-  return scalar::utf8_to_latin1::convert(buf, len, latin1_output);
+  utf8_to_latin1::validating_transcoder converter;
+  return converter.convert(buf, len, latin1_output);
 }
 
 simdutf_warn_unused result implementation::convert_utf8_to_latin1_with_errors(const char* buf, size_t len, char* latin1_output) const noexcept {
