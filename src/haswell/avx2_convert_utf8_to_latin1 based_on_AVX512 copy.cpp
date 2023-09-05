@@ -2,7 +2,6 @@
 
 // File contains conversion procedure from possibly invalid UTF-8 strings.
 
-// template <bool is_remaining, bool use_masked_store>
 template <bool is_remaining>
 size_t process_block_avx2(const char *buf, size_t len, char *latin_output,
                           __m256i minus64, __m256i one,

@@ -35,7 +35,7 @@ size_t convert_masked_utf8_to_latin1(const char *input,
 
 const __m128i in = _mm_loadu_si128((__m128i *)input);
 const uint16_t input_utf8_end_of_code_point_mask =
-    utf8_end_of_code_point_mask & 0xffff; // we're only processing 16 bytes in case it`s not all ASCII
+    utf8_end_of_code_point_mask & 0xfff; // we're only processing 16 bytes in case it`s not all ASCII
 
   if((input_utf8_end_of_code_point_mask & 0xffff) == 0xffff) {
     // Load the next 128 bits.
